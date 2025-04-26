@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Разметка паттернов</title>
+    <script src="https://unpkg.com/lightweight-charts@4.1.1/dist/lightweight-charts.js"></script> <!-- Подключаем библиотеку для графиков -->
+    <style> 
+        #chart { width: 100%; height: 600px; }
+        #controls { margin: 10px 0; }
+    </style>
+</head>
+<body>
+    <div id="controls"> <!-- Панель управления -->
+        <input id="symbol" placeholder="BTCUSDT" value="BTCUSDT">           <!-- Поле для ввода символа валютной пары -->
+    <input id="interval" placeholder="15" value="15">                       <!-- Поле для ввода интервала (например, 15) -->
+        <select id="patternType">                                           <!-- Выпадающий список для выбора типа паттерна -->
+            <option value="triangle">Треугольник</option>
+            <option value="double_top">Двойная вершина</option>
+        </select>
+        <button onclick="loadData()">Загрузить</button>                     <!-- Кнопка для загрузки данных -->
+        <button onclick="submitPattern()">Сохранить паттерн</button>        <!-- Кнопка для сохранения паттерна -->
+    </div>
+    <div id="chart"></div>                                                  <!-- Место для отображения графика -->
+
+    <script>
+        // Создание графика
+        const chart = LightweightCharts.createChart(document.getElementById('chart'), {
+            width: 800,
+            height: 600,
+        });
+        const candleSeries = chart.addCandlestickSeries();                  // Добавляем серию для отображения свечей
+        let candles = [];                                                   // Массив для хранения данных свечей
+        let pattern = {start: null, end: null};                             // Объект для хранения точек начала и конца паттерна
+
+        // Функция для загрузки данных
+        function loadData() {
+            const symbol = document.getElementById('symbol').value;         // Считываем символ валюты (например, BTCUSDT)
+            const interval = document.getElementById('interval').value;     // Считываем интервал (например, 15)
+            // Делаем запрос на сервер для получения данных
+            fetch(`/get_klines?symbol=${symbol}&interval=${interval}`)      // Делаем запрос на сервер, чтобы получить данные
+                .then(res => res.json())                                    // Ответ приходит в формате JSON
+                .then(data => {                                             // Когда получаем данные, обрабатываем их
+                    candles = data.map(candle => ({                         // Проходим по каждой свече (candle)
+                        time: Math.floor(candle.time / 1000),               // Преобразуем миллисекунды в секунды
+                        open: candle.open,                                  // Значение open
+                        high: candle.high,                                  // Значение high
+                        low: candle.low,                                    // Значение low
+                        close: candle.close                                 // Значение close
+                    }));
+                    console.log("⏱ Преобразованные свечи:", candles);       // Выводим преобразованные данные в консоль для отладки
+                    candleSeries.setData(candles);                          // Передаем данные на график
+                    pattern = {start: null, end: null};                     // Сбросим переменную для паттерна (чтобы начать с чистого листа)
+                });
+        }
+
+        // Функция для обработки кликов на графике
+        chart.subscribeClick(param => {
+            if (!param.time) return;                                                                    // Если время не передано, ничего не делаем
+            if (!pattern.start) {
+                pattern.start = param.time;                                                             // Если точка старта ещё не выбрана, сохраняем её
+                alert("Старт: " + new Date(param.time).toLocaleString());                               // Выводим стартовую точку
+            } else if (!pattern.end) {
+                pattern.end = param.time;                                                               // Если точка конца ещё не выбрана, сохраняем её
+                alert("Конец: " + new Date(param.time).toLocaleString());                               // Выводим конечную точку
+            } else {
+                alert("Уже выбрано 2 точки. Сначала нажми «Сохранить паттерн» или загрузи заново.");    // Если две точки уже выбраны
+            }
+        });
+
+        // Функция для сохранения паттерна
+        function submitPattern() {
+            const symbol = document.getElementById('symbol').value;                                     // Получаем символ валюты
+            const interval = document.getElementById('interval').value;                                 // Получаем интервал
+            const patternType = document.getElementById('patternType').value;                           // Получаем тип паттерна
+
+            if (!pattern.start || !pattern.end) {                                                       // Проверяем, что обе точки выбраны
+                alert("Сначала выбери 2 точки на графике.");                                            // Если нет, выводим предупреждение
+                return;
+            }
+
+            // Формируем данные для отправки на сервер
+            const data = {
+                symbol,
+                interval,
+                pattern_type: patternType,
+                start_time: Math.min(pattern.start, pattern.end) / 1000,                                // Преобразуем время в секунды
+                end_time: Math.max(pattern.start, pattern.end) / 1000                                   // Преобразуем время в секунды
+            };
+
+            // Отправляем данные на сервер для сохранения паттерна
+            fetch('/submit_pattern', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(data)                                                              // Отправляем данные в формате JSON
+            }).then(res => res.json())
+              .then(() => {
+                  alert("Паттерн сохранён!");                                                           // Показываем сообщение об успешном сохранении
+                  pattern = {start: null, end: null};                                                   // Сбрасываем переменные для паттерна
+              });
+        }
+    </script>
+</body>
+</html>

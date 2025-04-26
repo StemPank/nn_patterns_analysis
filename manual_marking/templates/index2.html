@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Разметка паттернов</title>
+    <script src="https://unpkg.com/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js"></script>
+    <style>
+        #chart { width: 100%; height: 600px; }
+        #controls { margin: 10px 0; }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin: 4px 0;
+            font-family: sans-serif;
+        }
+        
+        .legend-color {
+            width: 16px;
+            height: 16px;
+            margin-right: 8px;
+            border-radius: 2px;
+            border: 1px solid #444;
+        }
+    </style>
+</head>
+<body>
+    <div id="controls">
+        <input id="symbol" placeholder="BTCUSDT" value="BTCUSDT">
+        <input id="interval" placeholder="15" value="15">
+        <select id="patternType" onchange="showPatternDescription()">
+            <option value="flag">Флаг</option>
+            <option value="pennant">Вымпел</option>
+            <option value="rectangle">Прямоугольник</option>
+            <option value="symmetric_triangle">Cимметричный Треугольник </option>
+            <option value="ascending_triangle">Восходящий Треугольник </option>
+            <option value="descending_triangle">Нисходящий Треугольник </option>
+            <option value="head_and_shoulders">Голова и плечи</option>
+            <option value="inverse_head_and_shoulders">Перевернутая голова и плечи</option>
+            <option value="double_top">Двойная вершина</option>
+            <option value="double_bottom">Двойное дно</option>
+            <option value="triple_top">Тройная вершина</option>
+            <option value="triple_bottom">Тройное дно</option>
+            <option value="ascending_wedge">Восходящий Клин</option>
+            <option value="descending_wedge">Нисходящий Клин</option>
+        </select>
+        <button onclick="loadData()">Загрузить</button>
+        <button onclick="submitPattern()">Сохранить паттерн</button>
+    </div>
+
+
+    <!-- Контейнер для описания паттерна -->
+    <div id="patternDescription" style="margin-top: 20px; font-size: 16px; color: #333;"></div>
+
+    <script>
+        // Функция для отображения описания выбранного паттерна
+        function showPatternDescription() {
+            const patternType = document.getElementById("patternType").value;
+            let description = "";
+
+            switch(patternType) {
+                case "flag":
+                    description = "Флаг — это консолидация после сильного движения в сторону тренда. Обычно флаги наклонены против тренда.";
+                    break;
+                case "pennant":
+                    description = "Вымпел — это консолидация, которая образуется после сильного движения, и её вершины сходятся, создавая форму треугольника.";
+                    break;
+                case "rectangle":
+                    description = "Прямоугольник — это паттерн консолидации, где цены движутся в пределах ограниченного диапазона до продолжения тренда.";
+                    break;
+                case "symmetric_triangle":
+                    description = "Треугольник — паттерн, когда цена сужается между двумя трендлайнами, и предсказывает продолжение или разворот тренда. Симметричный треугольник: Ожидается продолжение текущего тренда, и цена должна выйти из диапазона в направлении предыдущего движения.";
+                    break;
+                case "ascending_triangle":
+                    description = "Треугольник — паттерн, когда цена сужается между двумя трендлайнами, и предсказывает продолжение или разворот тренда. Восходящий треугольник: Паттерн, когда верхний трендлайн горизонтален или наклонен, а нижний трендлайн восходящий. Часто он сигнализирует о продолжении восходящего тренда.";
+                    break;
+                case "descending_triangle":
+                    description = "Треугольник — паттерн, когда цена сужается между двумя трендлайнами, и предсказывает продолжение или разворот тренда. Нисходящий треугольник: Паттерн, когда верхний трендлайн наклонен вниз, а нижний трендлайн горизонтален или наклонен вниз. Он часто сигнализирует о продолжении нисходящего тренда.";
+                    break;
+                case "head_and_shoulders":
+                    description = "Голова и плечи — паттерн разворота, который сигнализирует о завершении восходящего тренда и возможном начале нисходящего.";
+                    break;
+                case "inverse_head_and_shoulders":
+                    description = "Перевернутая голова и плечи — паттерн, который сигнализирует о развороте нисходящего тренда в восходящий.";
+                    break;
+                case "double_top":
+                    description = "Двойная вершина — паттерн разворота, который возникает, когда цена дважды достигает одинаковой точки сопротивления, затем падает.";
+                    break;
+                case "double_bottom":
+                    description = "Двойное дно — паттерн разворота, когда цена дважды достигает низкой точки, а затем начинает расти.";
+                    break;
+                case "triple_top":
+                    description = "Тройная вершина — паттерн, который появляется после трёх попыток пробить уровень сопротивления, но цена не может продолжить рост.";
+                    break;
+                case "triple_bottom":
+                    description = "Тройное дно - Подобен тройной вершине, но в данном случае цена трижды откатывалась от одного уровня поддержки.";
+                    break;
+                case "ascending_wedge":
+                    description = "Восходящий клин - Когда оба трендлайна наклонены вверх, и верхний трендлайн имеет более крутой угол, чем нижний. Это часто сигнализирует о ослаблении восходящего тренда и возможном развороте.";
+                    break;
+                case "descending_wedge":
+                    description = "Нисходящий клин - Когда оба трендлайна наклонены вниз, и верхний трендлайн имеет более крутой угол, чем нижний. Это может сигнализировать о завершении нисходящего тренда и возможном развороте вверх.";
+                    break;
+                default:
+                    description = "Выберите паттерн для отображения описания.";
+            }
+
+            // Отображаем описание в контейнере
+            document.getElementById("patternDescription").innerText = description;
+        }
+
+        // Инициализируем описание при загрузке страницы (для первоначальной установки)
+        showPatternDescription();
+    </script>
+
+
+    <div id="chart"></div>
+    <div id="legend"></div>
+
+    <script>
+        // Создание графика
+        const chart = LightweightCharts.createChart(document.getElementById('chart'), {
+            width: window.innerWidth,
+            height: 600,
+        });
+
+        const patternColors = {
+            flag: 'rgba(255, 0, 0, 0.7)',
+            pennant: 'rgba(255, 128, 0, 0.7)',
+            rectangle: 'rgba(255, 255, 0, 0.7)',
+            symmetric_triangle: 'rgba(0, 255, 0, 0.7)',
+            ascending_triangle: 'rgba(0, 200, 100, 0.7)',
+            descending_triangle: 'rgba(0, 150, 150, 0.7)',
+            head_and_shoulders: 'rgba(0, 0, 255, 0.7)',
+            inverse_head_and_shoulders: 'rgba(75, 0, 130, 0.7)',
+            double_top: 'rgba(128, 0, 128, 0.7)',
+            double_bottom: 'rgba(255, 0, 255, 0.7)',
+            triple_top: 'rgba(100, 100, 100, 0.7)',
+            triple_bottom: 'rgba(0, 255, 255, 0.7)',
+            ascending_wedge: 'rgba(139, 69, 19, 0.7)',
+            descending_wedge: 'rgba(165, 42, 42, 0.7)'
+        };
+        const patternNames = {
+            flag: 'Флаг',
+            pennant: 'Вымпел',
+            rectangle: 'Прямоугольник',
+            symmetric_triangle: 'Симметричный Треугольник',
+            ascending_triangle: 'Восходящий Треугольник',
+            descending_triangle: 'Нисходящий Треугольник',
+            head_and_shoulders: 'Голова и плечи',
+            inverse_head_and_shoulders: 'Перевернутая голова и плечи',
+            double_top: 'Двойная вершина',
+            double_bottom: 'Двойное дно',
+            triple_top: 'Тройная вершина',
+            triple_bottom: 'Тройное дно',
+            ascending_wedge: 'Восходящий Клин',
+            descending_wedge: 'Нисходящий Клин'
+        };
+
+        const candleSeries = chart.addCandlestickSeries();
+        let candles = [];
+        let pattern = { start: null, end: null };
+
+        // Функция для загрузки и отображения паттернов
+        function loadPatterns(symbol, interval) {
+            fetch(`/get_patterns?symbol=${symbol}&interval=${interval}`)
+                .then(res => res.json())
+                .then(patterns => {
+                    patterns.forEach(pattern => {
+                        drawPattern(pattern.start_time, pattern.end_time, pattern.pattern_type);
+                    });
+                    console.log("⏱ Преобразованные паттерны:", patterns);
+                });
+        }
+
+        // Функция для рисования паттерна на графике
+        function drawPattern(startTime, endTime, patternType) {
+            const color = patternColors[patternType] || 'rgba(128, 128, 128, 0.1)';
+            const patternLabel = patternNames[patternType] || patternType;
+        
+            const patternCandles = candles.filter(c => c.time >= startTime && c.time <= endTime);
+            if (patternCandles.length === 0) return;
+        
+            const minPrice = Math.min(...patternCandles.map(c => c.low));
+            const maxPrice = Math.max(...patternCandles.map(c => c.high));
+            const avgPrice = (minPrice + maxPrice) / 2;
+        
+            // Заливка
+            const series = chart.addAreaSeries({
+                topColor: color,
+                bottomColor: color,
+                lineColor: color,
+                lineWidth: 0,
+                priceLineVisible: false
+            });
+        
+            series.setData([
+                { time: startTime, value: maxPrice },
+                { time: endTime, value: maxPrice }
+            ]);
+        
+            // Название на графике
+            chart.addLineSeries({
+                color: color,
+                lineWidth: 0,
+                lastValueVisible: false,
+                crossHairMarkerVisible: false,
+                priceLineVisible: true
+            }).createPriceLine({
+                price: avgPrice,
+                color: color,
+                lineWidth: 1,
+                lineStyle: LightweightCharts.LineStyle.Solid,
+                axisLabelVisible: true,
+                title: patternLabel
+            });
+            
+        
+            // В легенду
+            addLegendItem(patternType, color);
+        }
+
+        //
+        function addLegendItem(type, color) {
+            const legend = document.getElementById('legend');
+            if (document.getElementById(`legend-${type}`)) return;
+        
+            const item = document.createElement('div');
+            item.className = 'legend-item';
+            item.id = `legend-${type}`;
+        
+            const colorBox = document.createElement('div');
+            colorBox.className = 'legend-color';
+            colorBox.style.backgroundColor = color;
+        
+            const label = document.createElement('span');
+            label.textContent = patternNames[type] || type;
+        
+            item.appendChild(colorBox);
+            item.appendChild(label);
+            legend.appendChild(item);
+        }
+
+        // Функция для загрузки данных
+        function loadData() {
+            const symbol = document.getElementById('symbol').value;
+            const interval = document.getElementById('interval').value;
+
+            fetch(`/get_klines?symbol=${symbol}&interval=${interval}`)
+                .then(res => res.json())
+                .then(data => {
+                    candles = data.map(candle => ({
+                        time: Math.floor(candle.time / 1000),
+                        open: candle.open,
+                        high: candle.high,
+                        low: candle.low,
+                        close: candle.close
+                    }));
+                    console.log("⏱ Преобразованные свечи:", candles);
+                    candleSeries.setData(candles);
+                    pattern = { start: null, end: null };
+
+                    // Загрузить и отобразить паттерны
+                    loadPatterns(symbol, interval);
+                });
+        }
+
+        // Функция для обработки кликов на графике
+        chart.subscribeClick(param => {
+            if (!param.time) return;
+            if (!pattern.start) {
+                pattern.start = param.time;
+                alert("Старт: " + new Date(param.time * 1000).toLocaleString());
+            } else if (!pattern.end) {
+                pattern.end = param.time;
+                alert("Конец: " + new Date(param.time * 1000).toLocaleString());
+            } else {
+                alert("Уже выбрано 2 точки. Сначала нажми «Сохранить паттерн» или загрузи заново.");
+            }
+        });
+
+        // Функция для сохранения паттерна
+        function submitPattern() {
+            const symbol = document.getElementById('symbol').value;
+            const interval = document.getElementById('interval').value;
+            const patternType = document.getElementById('patternType').value;
+
+            //console.log("Тест symbol:", symbol);
+            //console.log("Тест interval:", interval);
+            //console.log("Тест patternType:", patternType);
+            //console.log("Тест pattern.start:", pattern.start);
+            //console.log("Тест pattern.end:", pattern.end);
+
+            if (!pattern.start || !pattern.end) {
+                alert("Сначала выбери 2 точки на графике.");
+                return;
+            }
+
+            // Формируем данные для отправки на сервер
+            const data = {
+                symbol,
+                interval,
+                pattern_type: patternType,
+                start_time: Math.min(pattern.start, pattern.end),
+                end_time: Math.max(pattern.start, pattern.end)
+            };
+
+            console.log("Тест data:", data);
+
+            // Отправляем данные на сервер для сохранения паттерна
+            fetch('/submit_pattern', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            })
+            .then(res => res.json())
+            .then(() => {
+                alert("Паттерн сохранён!");
+                pattern = { start: null, end: null };
+            });
+        }
+    </script>
+</body>
+</html>
