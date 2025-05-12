@@ -18,20 +18,22 @@ class Agent():
         self.instance = HTTP(
             api_key=self.__API_KEY, 
             api_secret=self.__SECRET_KEY, 
-            testnet=True, 
+            # testnet=True, 
             log_requests=True 
         )
         self.interval = "15"
         self.time_start = datetime.strptime("2023-01-01", "%Y-%m-%d").date()
 
 
-    def historical_data(self, symbol):
+    def historical_data(self, symbol, interval):
         """
             Загрузка исторыческих данных
 
             Аргумент:
                 symbol: str - имя символа
         """
+        
+        self.interval = str(interval)
         logger.info(f"Загрузка данных для {symbol}")
         START = int(datetime.combine(self.time_start, datetime.min.time()).timestamp() * 1000)
         END = int(datetime.now().replace(microsecond=0).timestamp() * 1000)

@@ -1,10 +1,11 @@
 import os, json
 import sqlite3
+import random
 
 from loggings import LoggerManager
 
 
-logger = LoggerManager().get_named_logger("pattern_detection_app")
+logger = LoggerManager().get_named_logger("data_for_pattern")
 
 class MainDatabase():
     def __init__(self):
@@ -57,6 +58,19 @@ class MainDatabase():
         connection.commit()
         connection.close()
 
+    def save_to_new_table(self, symbol_auto, interval, data):
+        """Для записи автоматически созданных результатов"""
+        connection = self.get_connection()
+        cursor = connection.cursor()
+        for row in data:
+            time, open_, high, low, close, volume = row
+            cursor.execute("""
+                INSERT INTO kline (symbol, interval, time, open, high, low, close, volume)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, (symbol_auto, interval, time, open_, high, low, close, volume))
+        connection.commit()
+        connection.close()
+
     def get_klines(self, symbol, interval, start_time=None, end_time=None):
         connection = self.get_connection()
         cursor = connection.cursor()
@@ -77,6 +91,19 @@ class MainDatabase():
         query += ' ORDER BY time ASC'
 
         cursor.execute(query, params)
+        res = cursor.fetchall()
+        connection.close()
+        return res
+
+    def fetch_historical_data(self, symbol, interval):
+        connection = self.get_connection()
+        cursor = connection.cursor()
+        cursor.execute("""
+            SELECT time, open, high, low, close, volume
+            FROM kline
+            WHERE symbol = ? AND interval = ?
+            ORDER BY time ASC
+        """, (symbol, interval))
         res = cursor.fetchall()
         connection.close()
         return res
@@ -156,3 +183,167 @@ class MainDatabase():
                 'end_time': row[2]
             } for row in res
         ]
+
+    
+    
+    #for dataset
+    def get_for_dataset(self, interval, label_by, buffer=10, stec=120): # stec - длинна паттерна для обучения, макс. длинна паттерна + buffer*2
+        """Формирование датасета"""
+        from collections import defaultdict
+
+        connection = self.get_connection()
+        cursor = connection.cursor()
+        # запрос на получение всех паттернов
+        cursor.execute('''
+            SELECT symbol, interval, pattern_type, start_time, end_time, label_by
+            FROM patterns;
+        ''')
+        patterns = cursor.fetchall()
+        logger.debug(patterns[:3])
+        
+        dataset = defaultdict(list)
+        used_ranges = []
+
+        # Переводим интервал в милисекунды
+        units = {"1": 60000, "3": 180000, "5": 300000, "15": 900000, "30": 1800000, "60": 3600000, "120": 7200000, "240": 14400000, "360": 21600000, "720": 43200000, "D": 86400000, "W": 604800000, "M": 2592000000}
+        buffer_ = units.get(str(interval), 0)
+        
+        for p in patterns:
+            symbol, interval, pattern_type = p[0], p[1], p[2]
+            start_time, end_time = p[3], p[4]
+
+            # Получаем данные по паттерну и в стороны от него на buffer
+            cursor.execute(
+                """
+                SELECT time, open, high, low, close, volume
+                FROM kline
+                WHERE symbol = ? AND interval = ? AND time BETWEEN ? AND ?
+                ORDER BY time
+                """,
+                (symbol, interval, start_time*1000 - buffer * buffer_, end_time*1000 + buffer * buffer_)
+            )
+            candles = cursor.fetchall()
+
+            if len(candles) < stec: # если паттерн меньше чем stec, то добавляем еще buffer свечей перед паттерном
+                # logger.debug(f"Длинна паттерна {len(candles)}")
+                diff = stec - len(candles) # разница между паттерном и stec
+                # logger.debug(f"Разница difference = {diff}")
+                cursor.execute(
+                    """
+                    SELECT time, open, high, low, close, volume
+                    FROM kline
+                    WHERE symbol = ? AND interval = ? AND time BETWEEN ? AND ?
+                    ORDER BY time
+                    """,
+                    (symbol, interval, start_time*1000 - (buffer + diff) * buffer_, end_time*1000 + buffer * buffer_)
+                )
+                candles = cursor.fetchall()
+                
+
+            # logger.debug(candles[:3])
+
+            if len(candles) > 0:
+                # logger.debug(f"длинна записаного паттерна {len(candles)}")
+                dataset[pattern_type].append(candles) # добавляем паттерн в датасет
+                used_ranges.append((symbol, interval, start_time*1000 - buffer * buffer_, end_time*1000 + buffer * buffer_)) # запоминаем диапазон паттерна
+          
+        # Получаем негативные примеры — участки без паттернов
+        key_syimbol = defaultdict(list)
+        for p in used_ranges: 
+            # записывает время конца предыдущего паттерна и время начала текущего, в промежутке между ними ищет негативные паттерны
+            symbol, interval, start_time, end_time = p[0], p[1], p[2], p[3]
+            if (symbol, interval) not in key_syimbol:
+                key_syimbol[(symbol, interval)] = end_time
+            else:
+                end_time_ = start_time
+                start_time_ = key_syimbol[(symbol, interval)]
+                diapason = (start_time_-end_time_)//buffer_
+
+                if diapason > 130:  # stec + i (отступ от начала)
+                
+                    window_size = 100 + buffer*2 # maximum длина паттерна
+                    i = 10 # отступ от начала т.к. буфер 10, чтобы не пересекаться с паттерном
+
+                    while i + window_size < diapason:
+                        window_size = random.randint(40, 100) # кол-во свечей для одного примера
+                        step = random.randint(120, 140) # шаг для сдвига паттерна, чтобы не пересекаться с паттерном
+                        
+                        # Получаем буферизированные границы
+                        cursor.execute(
+                            """
+                            SELECT time, open, high, low, close, volume
+                            FROM kline
+                            WHERE symbol = ? AND interval = ? AND time BETWEEN ? AND ?
+                            ORDER BY time
+                            """,
+                            (symbol, interval, start_time_ + i * buffer_, start_time_ + (i + window_size) * buffer_)
+                        )
+                        candles = cursor.fetchall()
+
+                        if len(candles) < stec: # если паттерн меньше чем stec, то добавляем еще buffer свечей
+                            # logger.debug(f"Длинна паттерна {len(candles)}")
+                            diff = stec - len(candles)
+                            # logger.debug(f"Разница difference = {diff}")
+                            cursor.execute(
+                                """
+                                SELECT time, open, high, low, close, volume
+                                FROM kline
+                                WHERE symbol = ? AND interval = ? AND time BETWEEN ? AND ?
+                                ORDER BY time
+                                """,
+                                (symbol, interval, start_time_ + i * buffer_, start_time_ + (i + window_size + diff) * buffer_)
+                            )
+                            candles = cursor.fetchall()
+
+                        if len(candles) > 0:
+                            dataset["none"].append(candles)
+
+                        i += step
+
+                    key_syimbol[(symbol, interval)] = end_time
+
+        connection.close()
+        # logger.info(f"Получено {dataset['ascending_triangle'][0]}")
+        logger.info(f"Получено {len(dataset['ascending_triangle'])} паттернов для ascending_triangle")
+        logger.info(f"Получено {len(dataset['descending_triangle'])} паттернов для descending_triangle")
+        logger.info(f"Получено {len(dataset['symmetric_triangle'])} паттернов для symmetric_triangle")
+        logger.info(f"Получено {len(dataset['ascending_wedge'])} паттернов для ascending_wedge")
+        logger.info(f"Получено {len(dataset['descending_wedge'])} паттернов для descending_wedge")
+        logger.info(f"Получено {len(dataset['bull_flag'])} паттернов для bull_flag")
+        logger.info(f"Получено {len(dataset['bear_flag'])} паттернов для bear_flag")
+        logger.info(f"Получено {len(dataset['none'])} паттернов для none")
+        logger.debug(dataset.keys())
+        return dataset
+
+
+
+
+
+
+    def delete_symbol_data(self, symbol):
+        """
+        Удаляет данные по символу из таблиц kline и patterns
+        """
+        connection = self.get_connection()
+        cursor = connection.cursor()
+
+        # Удаление из таблицы свечей
+        cursor.execute("DELETE FROM kline WHERE symbol = ?", (symbol,))
+        print(f"🗑 Удалено из klines: {cursor.rowcount} строк для символа {symbol}")
+
+        # Удаление из таблицы паттернов
+        cursor.execute("DELETE FROM patterns WHERE symbol = ?", (symbol,))
+        print(f"🗑 Удалено из patterns: {cursor.rowcount} строк для символа {symbol}")
+
+        connection.commit()
+        connection.close()
+        print("✅ Удаление завершено.")
+
+
+
+
+
+if __name__ == "__main__":
+    db = MainDatabase()
+    # db.delete_symbol_data("BTCUSDT_auto")
+    db.get_for_dataset(15, "manual")
